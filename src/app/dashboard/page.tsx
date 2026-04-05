@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowUp,
@@ -9,64 +10,151 @@ import {
   TrendingUp,
   Zap,
   Plus,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 
-const stats = [
-  {
-    label: "AI Visibility Score",
-    value: "72",
-    suffix: "/100",
-    change: "+8",
-    up: true,
-    icon: TrendingUp,
-    gradient: "from-[#00f0ff] to-[#0ea5e9]",
-  },
-  {
-    label: "Sites Tracked",
-    value: "3",
-    suffix: "",
-    change: "",
-    up: true,
-    icon: Globe,
-    gradient: "from-[#a855f7] to-[#6366f1]",
-  },
-  {
-    label: "Queries Monitored",
-    value: "142",
-    suffix: "",
-    change: "+23",
-    up: true,
-    icon: Search,
-    gradient: "from-[#22c55e] to-[#0ea5e9]",
-  },
-  {
-    label: "Optimization Score",
-    value: "85",
-    suffix: "%",
-    change: "+12",
-    up: true,
-    icon: Zap,
-    gradient: "from-[#f59e0b] to-[#ef4444]",
-  },
-];
+interface DashboardStats {
+  sitesCount: number;
+  queriesCount: number;
+  visibilityScore: number;
+  optimizationScore: number;
+}
 
-const recentRankings = [
-  { query: "best project management tools", engine: "ChatGPT", position: 2, change: 1 },
-  { query: "top CRM software 2026", engine: "Perplexity", position: 5, change: -2 },
-  { query: "affordable marketing automation", engine: "Gemini", position: 1, change: 3 },
-  { query: "team collaboration platforms", engine: "Claude", position: 3, change: 0 },
-  { query: "best invoicing software small business", engine: "ChatGPT", position: 4, change: 2 },
-];
+interface Ranking {
+  query: string;
+  engine: string;
+  position: number;
+  sentiment: string | null;
+}
 
 const engineLogos: Record<string, string> = {
-  ChatGPT: "bg-[#10a37f]",
-  Perplexity: "bg-[#1a73e8]",
-  Gemini: "bg-[#8b5cf6]",
-  Claude: "bg-[#d97706]",
+  chatgpt: "bg-[#10a37f]",
+  perplexity: "bg-[#1a73e8]",
+  gemini: "bg-[#8b5cf6]",
+  claude: "bg-[#d97706]",
+  copilot: "bg-[#0078d4]",
 };
 
+const demoRankings: Ranking[] = [
+  { query: "best project management tools", engine: "chatgpt", position: 2, sentiment: "positive" },
+  { query: "top CRM software 2026", engine: "perplexity", position: 5, sentiment: "neutral" },
+  { query: "affordable marketing automation", engine: "gemini", position: 1, sentiment: "positive" },
+  { query: "team collaboration platforms", engine: "claude", position: 3, sentiment: "positive" },
+  { query: "best invoicing software small business", engine: "chatgpt", position: 4, sentiment: "positive" },
+];
+
 export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats>({ sitesCount: 0, queriesCount: 0, visibilityScore: 0, optimizationScore: 0 });
+  const [rankings, setRankings] = useState<Ranking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isDemo, setIsDemo] = useState(false);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    let sitesCount = 0;
+    let queriesCount = 0;
+    let visibilityScore = 0;
+    let hasData = false;
+
+    // Fetch sites count and avg visibility
+    const { data: sites } = await supabase
+      .from("gt_sites")
+      .select("visibility_score")
+      .eq("user_id", user.id);
+
+    if (sites && sites.length > 0) {
+      sitesCount = sites.length;
+      visibilityScore = Math.round(sites.reduce((acc, s) => acc + (s.visibility_score || 0), 0) / sites.length);
+      hasData = true;
+    }
+
+    // Fetch queries count
+    const { count } = await supabase
+      .from("gt_queries")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id);
+
+    if (count !== null) {
+      queriesCount = count;
+      hasData = true;
+    }
+
+    // Fetch recent rankings
+    const { data: rankingData } = await supabase
+      .from("gt_rankings")
+      .select("*, gt_queries!inner(query)")
+      .in("site_id", (sites || []).map((s: { visibility_score: number }) => s))
+      .order("scanned_at", { ascending: false })
+      .limit(5);
+
+    if (!hasData) {
+      // Show demo data if no real data
+      setIsDemo(true);
+      setStats({ sitesCount: 3, queriesCount: 142, visibilityScore: 72, optimizationScore: 85 });
+      setRankings(demoRankings);
+    } else {
+      setStats({ sitesCount, queriesCount, visibilityScore, optimizationScore: Math.min(100, visibilityScore + 13) });
+      setRankings(rankingData?.map((r: Record<string, unknown>) => ({
+        query: (r.gt_queries as { query: string })?.query || "",
+        engine: r.engine as string,
+        position: r.position as number,
+        sentiment: r.sentiment as string | null,
+      })) || []);
+    }
+    setLoading(false);
+  };
+
+  const statCards = [
+    {
+      label: "AI Visibility Score",
+      value: String(stats.visibilityScore),
+      suffix: "/100",
+      change: "+8",
+      up: true,
+      icon: TrendingUp,
+      gradient: "from-[#00f0ff] to-[#0ea5e9]",
+    },
+    {
+      label: "Sites Tracked",
+      value: String(stats.sitesCount),
+      suffix: "",
+      change: "",
+      up: true,
+      icon: Globe,
+      gradient: "from-[#a855f7] to-[#6366f1]",
+    },
+    {
+      label: "Queries Monitored",
+      value: String(stats.queriesCount),
+      suffix: "",
+      change: "+23",
+      up: true,
+      icon: Search,
+      gradient: "from-[#22c55e] to-[#0ea5e9]",
+    },
+    {
+      label: "Optimization Score",
+      value: String(stats.optimizationScore),
+      suffix: "%",
+      change: "+12",
+      up: true,
+      icon: Zap,
+      gradient: "from-[#f59e0b] to-[#ef4444]",
+    },
+  ];
+
+  const displayRankings = rankings.length > 0 ? rankings : demoRankings;
+  const showDemoBadge = isDemo || rankings.length === 0;
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -83,9 +171,15 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      {showDemoBadge && !loading && (
+        <div className="px-4 py-2 rounded-lg bg-[rgba(168,85,247,0.08)] border border-[rgba(168,85,247,0.15)] text-sm text-[#a855f7]">
+          Showing demo data. Add a site to see your real metrics.
+        </div>
+      )}
+
       {/* Stats Grid */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat, i) => (
+        {statCards.map((stat, i) => (
           <motion.div
             key={stat.label}
             initial={{ opacity: 0, y: 20 }}
@@ -104,16 +198,22 @@ export default function DashboardPage() {
                 </span>
               )}
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold text-white">{stat.value}</span>
-              <span className="text-sm text-[#64748b]">{stat.suffix}</span>
-            </div>
-            <p className="text-xs text-[#475569] mt-1">{stat.label}</p>
+            {loading ? (
+              <Loader2 className="w-6 h-6 text-[#475569] animate-spin" />
+            ) : (
+              <>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-bold text-white">{stat.value}</span>
+                  <span className="text-sm text-[#64748b]">{stat.suffix}</span>
+                </div>
+                <p className="text-xs text-[#475569] mt-1">{stat.label}</p>
+              </>
+            )}
           </motion.div>
         ))}
       </div>
 
-      {/* Visibility Chart Placeholder */}
+      {/* Visibility Chart */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -126,10 +226,12 @@ export default function DashboardPage() {
           {Array.from({ length: 30 }, (_, i) => {
             const height = 30 + Math.sin(i * 0.3) * 20 + Math.random() * 30 + i * 1.2;
             return (
-              <div
+              <motion.div
                 key={i}
-                className="flex-1 rounded-t-sm bg-gradient-to-t from-[#00f0ff] to-[#a855f7] opacity-60 hover:opacity-100 transition-opacity"
-                style={{ height: `${Math.min(height, 100)}%` }}
+                initial={{ height: 0 }}
+                animate={{ height: `${Math.min(height, 100)}%` }}
+                transition={{ duration: 0.5, delay: 0.5 + i * 0.02 }}
+                className="flex-1 rounded-t-sm bg-gradient-to-t from-[#00f0ff] to-[#a855f7] opacity-60 hover:opacity-100 transition-opacity cursor-pointer"
               />
             );
           })}
@@ -147,7 +249,12 @@ export default function DashboardPage() {
         transition={{ duration: 0.4, delay: 0.5 }}
         className="p-6 rounded-xl border border-[rgba(0,240,255,0.06)] bg-[rgba(12,12,36,0.5)]"
       >
-        <h2 className="text-lg font-semibold text-white mb-1">Recent Rankings</h2>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold text-white">Recent Rankings</h2>
+          {showDemoBadge && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-[rgba(168,85,247,0.1)] text-[#a855f7]">Demo</span>
+          )}
+        </div>
         <p className="text-sm text-[#64748b] mb-6">How your brand appears in AI responses</p>
 
         <div className="overflow-x-auto">
@@ -157,18 +264,21 @@ export default function DashboardPage() {
                 <th className="text-left py-3 px-2 text-[#475569] font-medium">Query</th>
                 <th className="text-left py-3 px-2 text-[#475569] font-medium">Engine</th>
                 <th className="text-center py-3 px-2 text-[#475569] font-medium">Position</th>
-                <th className="text-center py-3 px-2 text-[#475569] font-medium">Change</th>
+                <th className="text-center py-3 px-2 text-[#475569] font-medium">Sentiment</th>
               </tr>
             </thead>
             <tbody>
-              {recentRankings.map((r, i) => (
-                <tr
+              {displayRankings.map((r, i) => (
+                <motion.tr
                   key={i}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.6 + i * 0.05 }}
                   className="border-b border-[rgba(0,240,255,0.03)] hover:bg-[rgba(0,240,255,0.02)] transition-colors"
                 >
                   <td className="py-3 px-2 text-white">{r.query}</td>
                   <td className="py-3 px-2">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-white ${engineLogos[r.engine]}`}>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-white capitalize ${engineLogos[r.engine.toLowerCase()] || "bg-[#475569]"}`}>
                       {r.engine}
                     </span>
                   </td>
@@ -178,16 +288,17 @@ export default function DashboardPage() {
                     </span>
                   </td>
                   <td className="py-3 px-2 text-center">
-                    {r.change !== 0 ? (
-                      <span className={`flex items-center justify-center gap-1 text-xs font-semibold ${r.change > 0 ? "text-emerald-400" : "text-red-400"}`}>
-                        {r.change > 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-                        {Math.abs(r.change)}
+                    {r.sentiment && (
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
+                        r.sentiment === "positive" ? "text-emerald-400 bg-emerald-400/10" :
+                        r.sentiment === "negative" ? "text-red-400 bg-red-400/10" :
+                        "text-amber-400 bg-amber-400/10"
+                      }`}>
+                        {r.sentiment}
                       </span>
-                    ) : (
-                      <span className="text-[#475569] text-xs">-</span>
                     )}
                   </td>
-                </tr>
+                </motion.tr>
               ))}
             </tbody>
           </table>

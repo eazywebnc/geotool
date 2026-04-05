@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { Loader2, Check } from "lucide-react";
@@ -8,16 +8,63 @@ import { Loader2, Check } from "lucide-react";
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [reportFreq, setReportFreq] = useState("weekly");
   const [emailAlerts, setEmailAlerts] = useState(true);
+  const [plan, setPlan] = useState("free");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("gt_settings")
+      .select("*")
+      .eq("user_id", user.id)
+      .single();
+
+    if (data) {
+      setReportFreq(data.report_frequency || "weekly");
+      setEmailAlerts(data.email_alerts ?? true);
+      setPlan(data.plan || "free");
+    }
+    setInitialLoading(false);
+  };
 
   const handleSave = async () => {
     setLoading(true);
-    // Simulate save
-    await new Promise((r) => setTimeout(r, 500));
+    setError(null);
+
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error: upsertError } = await supabase
+        .from("gt_settings")
+        .upsert({
+          user_id: user.id,
+          report_frequency: reportFreq,
+          email_alerts: emailAlerts,
+          plan,
+        }, { onConflict: "user_id" });
+
+      if (upsertError) {
+        setError(upsertError.message);
+      } else {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } catch {
+      setError("Failed to save settings.");
+    }
     setLoading(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   };
 
   const handleDeleteAccount = async () => {
@@ -27,12 +74,26 @@ export default function SettingsPage() {
     window.location.href = "/";
   };
 
+  if (initialLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 text-[#00f0ff] animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 max-w-2xl">
       <div>
         <h1 className="text-3xl font-bold text-white">Settings</h1>
         <p className="text-[#64748b] mt-1">Manage your account and preferences</p>
       </div>
+
+      {error && (
+        <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/5 text-red-400 text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Report Preferences */}
       <motion.div
@@ -97,11 +158,11 @@ export default function SettingsPage() {
         <h2 className="text-lg font-semibold text-white mb-4">Subscription</h2>
         <div className="flex items-center justify-between p-4 rounded-xl bg-[rgba(0,240,255,0.03)] border border-[rgba(0,240,255,0.1)]">
           <div>
-            <p className="text-white font-medium">Free Trial</p>
-            <p className="text-xs text-[#475569]">14 days remaining</p>
+            <p className="text-white font-medium capitalize">{plan === "free" ? "Free Trial" : `${plan} Plan`}</p>
+            <p className="text-xs text-[#475569]">{plan === "free" ? "14 days remaining" : "Active subscription"}</p>
           </div>
           <button className="px-4 py-2 rounded-lg text-sm font-semibold text-[#050510] bg-gradient-to-r from-[#00f0ff] to-[#a855f7] hover:shadow-[0_0_20px_rgba(0,240,255,0.3)] transition-all">
-            Upgrade
+            {plan === "free" ? "Upgrade" : "Manage"}
           </button>
         </div>
       </motion.div>
