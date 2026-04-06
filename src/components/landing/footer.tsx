@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EcosystemFooter } from "./ecosystem-footer";
 
 export function Footer() {
   return (
@@ -25,6 +26,7 @@ export function Footer() {
             </a>
           </p>
         </div>
+        <EcosystemFooter />
       </div>
     </footer>
   );
