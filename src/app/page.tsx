@@ -10,9 +10,11 @@ export default function Home() {
     <div className="relative min-h-screen bg-[#030508]">
       <AnimatedMeshBg />
       <Navbar />
+      <main id="main-content">
       <Hero />
       <Features />
       <Pricing />
+      </main>
       <Footer />
     </div>
   );

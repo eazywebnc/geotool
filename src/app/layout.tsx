@@ -49,6 +49,45 @@ export const metadata: Metadata = {
   },
 };
 
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "GEOTool",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  url: "https://geotool.eazyweb.nc",
+  description:
+    "Track and improve how your brand appears in ChatGPT, Perplexity, Gemini and other AI-powered search engines.",
+  offers: [
+    {
+      "@type": "Offer",
+      name: "Starter",
+      price: "29",
+      priceCurrency: "USD",
+      priceValidUntil: "2027-12-31",
+    },
+    {
+      "@type": "Offer",
+      name: "Pro",
+      price: "79",
+      priceCurrency: "USD",
+      priceValidUntil: "2027-12-31",
+    },
+    {
+      "@type": "Offer",
+      name: "Enterprise",
+      price: "199",
+      priceCurrency: "USD",
+      priceValidUntil: "2027-12-31",
+    },
+  ],
+  creator: {
+    "@type": "Organization",
+    name: "EazyWebNC",
+    url: "https://eazyweb.nc",
+  },
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -59,7 +98,21 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
+      <body className="min-h-full flex flex-col">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:bg-cyan-500 focus:text-black focus:px-4 focus:py-2 focus:rounded"
+        >
+          Skip to content
+        </a>
+        {children}
+      </body>
     </html>
   );
 }
