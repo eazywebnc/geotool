@@ -29,6 +29,9 @@ export const metadata: Metadata = {
     "brand visibility AI",
   ],
   metadataBase: new URL("https://geotool.eazyweb.nc"),
+  alternates: {
+    canonical: "https://geotool.eazyweb.nc",
+  },
   openGraph: {
     title: "GEOTool — Optimize Your Visibility in AI Search Engines",
     description:
