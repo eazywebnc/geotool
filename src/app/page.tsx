@@ -4,6 +4,7 @@ import { Features } from "@/components/landing/features";
 import { Pricing } from "@/components/landing/pricing";
 import { Testimonials } from "@/components/landing/testimonials";
 import { Footer } from "@/components/landing/footer";
+import { DashboardPreview } from "@/components/landing/dashboard-preview";
 import { AnimatedMeshBg } from "@/components/landing/animated-bg";
 
 export default function Home() {
@@ -14,6 +15,7 @@ export default function Home() {
       <main id="main-content">
       <Hero />
       <Features />
+      <DashboardPreview />
       <Pricing />
       <Testimonials />
       </main>
